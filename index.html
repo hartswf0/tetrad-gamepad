@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tetrad Mini — One Controller, Chat in the Middle</title>
+<style>
+  :root{
+    --bg:#1a1b1f; --fg:#f6f3ee; --muted:#9aa0a6; --accent:#00c4ff; --accent2:#63ffc7;
+    --card:#2a2c32; --border:#3a3c42; --screen:#1f2024; --chip:#17181c; --warn:#ffb703;
+    --r:12px; --pad:14px; --gap:14px;
+
+    /* Tetrad Colors for Options */
+    --enhance-color: #66d9ff;
+    --obsolesce-color: #63ffc7;
+    --retrieve-color: #ffd166;
+    --reverse-color: #ff7aa2;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial}
+  .visually-hidden{position:absolute!important;clip:rect(1px,1px,1px,1px);clip-path:inset(50%);height:1px;width:1px;overflow:hidden;white-space:nowrap;padding:0;border:0}
+
+  .wrap{min-height:100%;display:grid;grid-template-rows:1fr auto}
+
+  main{padding:var(--pad); display: flex; justify-content: center; align-items: center;}
+
+  .controller{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:16px;display:grid;gap:16px;box-shadow:0 4px 10px rgba(0,0,0,.35); max-width: 900px; width: 100%;}
+  .controller-row{display:grid;gap:16px;grid-template-columns:140px 1fr 120px;align-items:center}
+  @media (max-width:900px){.controller-row{grid-template-columns:1fr;}}
+
+  /* D-Pad + vector field */
+  .leftStack{display:grid;gap:10px}
+  .field{background:var(--screen);border:1px solid var(--border);border-radius:10px;position:relative}
+  canvas#vector{width:100%;height:120px;display:block;border-radius:10px}
+  .dpad{display:grid;grid-template-columns:repeat(3,40px);grid-template-rows:repeat(3,40px);gap:5px;justify-content:center}
+  .dpad div{display:flex;align-items:center;justify-content:center}
+  .btn-arrow{width:40px;height:40px;border-radius:8px;background:var(--screen);border:1px solid var(--border);color:var(--fg);font-weight:700;cursor:pointer;box-shadow:inset 0 -2px 0 rgba(255,255,255,.05); transition: background-color 0.1s ease-out, outline-color 0.1s ease-out;}
+  .btn-arrow[data-op="enhance"][data-active="true"]{ background: #12222a; outline: 2px solid var(--enhance-color); }
+  .btn-arrow[data-op="obsolesce"][data-active="true"]{ background: #12222a; outline: 2px solid var(--obsolesce-color); }
+  .btn-arrow[data-op="retrieve"][data-active="true"]{ background: #12222a; outline: 2px solid var(--retrieve-color); }
+  .btn-arrow[data-op="reverse"][data-active="true"]{ background: #12222a; outline: 2px solid var(--reverse-color); }
+
+  .btn-arrow:active{transform:translateY(1px)}
+  .arrow-label{font-size:11px;color:var(--muted);text-align:center}
+
+  /* Chat in the middle of controller */
+  .screen{background:var(--screen);border:1px solid var(--border);border-radius:12px;padding:10px;display:grid;grid-template-rows:auto minmax(120px,40vh) auto;gap:10px}
+  .lcdbar{display:flex;gap:8px;align-items:center;justify-content:space-between}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{background:var(--chip);border:1px solid var(--border);color:var(--muted);padding:3px 8px;border-radius:999px;font-size:11px}
+  .lcd-right-cluster { display: flex; gap: 8px; align-items: center; }
+  .messages{overflow:auto;border:1px solid var(--border);border-radius:10px;padding:8px;background:#202228}
+  .msg{margin:8px 0}
+  .msg .who{font-size:11px;color:var(--muted)}
+  .bubble{margin-top:4px;padding:8px 10px;border-radius:10px;background:#25303a;border:1px solid var(--border);line-height:1.45}
+  .msg.user .bubble{background:#2b2831}
+  textarea{width:100%;min-height:70px;resize:vertical;border-radius:10px;background:transparent;border:1px solid var(--border);color:var(--fg);padding:10px;font:inherit}
+
+  .btn{border:1px solid var(--border);background:var(--screen);color:var(--fg);padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer}
+  .btn.send{background:var(--accent);color:#000;border-color:transparent}
+  .btn:active{transform:translateY(1px)}
+  .action-icon-btn {
+    background: var(--screen); border: 1px solid var(--border); color: var(--muted); font-size: 16px;
+    width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; cursor: pointer; transition: background-color 0.1s ease-out;
+  }
+  .action-icon-btn:hover { background: #3a3c42; }
+  .action-icon-btn:active { transform: translateY(1px); }
+
+  /* A/B to the right */
+  .ab{display:flex;gap:16px;justify-content:center}
+  .round-btn{width:56px;height:56px;border-radius:50%;background:var(--screen);border:2px solid var(--border);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 -3px 0 rgba(255,255,255,.06); transition: transform 0.1s ease-out;}
+  .round-btn:active{transform:translateY(1px)}
+  .round-btn#btnA { background: #E4002B; color: #fff; border-color: #A0001D; }
+  .round-btn#btnB { background: #FFC72C; color: #333; border-color: #D3A726; }
+  .btn-label{text-align:center;font-size:11px;color:var(--muted);margin-top:6px}
+
+  footer{padding:10px var(--pad);color:var(--muted);font-size:11px;text-align:center;}
+  .settings{display:none;grid-template-columns:1fr auto;gap:8px;margin-top:8px}
+  .settings input, .settings textarea {width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--screen);color:var(--fg);font-family:inherit;}
+  .settings textarea { min-height: 80px; resize: vertical; grid-column: 1 / -1; }
+  .warn{color:var(--warn)}
+
+  /* REFINED: Options Display */
+  .options-display {
+    border:1px solid var(--border); border-radius:10px; padding:8px;
+    background:#202228; margin-top: 10px;
+    opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease;
+  }
+  .options-display.visible { opacity: 1; visibility: visible; }
+  .options-prompt { font-size: 11px; color: var(--muted); margin: 0 0 8px 0; text-align: center; }
+  .option-buttons { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .option-button {
+    background: #2b3a4a; border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+    color: var(--fg); text-align: left; cursor: pointer; font-size: 13px; line-height: 1.4;
+    transition: background-color 0.1s ease-out, border-color 0.2s ease;
+    flex: 1 1 200px; /* Flexbox for horizontal layout */
+    border-left: 4px solid var(--border); /* Default colored border */
+  }
+  .option-button:hover { background: #354a60; }
+  .option-button:active { transform: translateY(1px); }
+
+  /* NEW: Colored option borders */
+  .option-button.option-enhance { border-left-color: var(--enhance-color); }
+  .option-button.option-obsolesce { border-left-color: var(--obsolesce-color); }
+  .option-button.option-retrieve { border-left-color: var(--retrieve-color); }
+  .option-button.option-reverse { border-left-color: var(--reverse-color); }
+
+  /* Typing animation */
+  .typing-animation { text-align: center; padding: 10px; font-size: 12px; color: var(--muted); }
+  .typing-animation span { display: inline-block; animation: blink 1s infinite steps(1, start); opacity: 0; }
+  .typing-animation span:nth-child(1) { animation-delay: 0s; }
+  .typing-animation span:nth-child(2) { animation-delay: 0.33s; }
+  .typing-animation span:nth-child(3) { animation-delay: 0.66s; }
+  @keyframes blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <main>
+    <section class="controller" aria-label="Controller with chat">
+      <div class="controller-row">
+        <!-- LEFT: vector + D-pad -->
+        <div class="leftStack">
+          <div class="field"><canvas id="vector" width="300" height="120" aria-label="Tetrad vector field"></canvas></div>
+          <div>
+            <div class="dpad" id="dpad">
+              <div></div>
+              <button class="btn-arrow" data-op="enhance" aria-pressed="false" aria-label="Enhance (Up)">↑</button>
+              <div></div>
+              <button class="btn-arrow" data-op="retrieve" aria-pressed="false" aria-label="Retrieve (Left)">←</button>
+              <div></div>
+              <button class="btn-arrow" data-op="obsolesce" aria-pressed="false" aria-label="Obsolesce (Right)">→</button>
+              <div></div>
+              <button class="btn-arrow" data-op="reverse" aria-pressed="false" aria-label="Reverse (Down)">↓</button>
+              <div></div>
+            </div>
+            <div class="arrow-label">↑ Enhance • → Obsolesce • ← Retrieve • ↓ Reverse</div>
+          </div>
+        </div>
+
+        <!-- CENTER: Chat screen IN the controller -->
+        <div class="screen">
+          <div class="lcdbar">
+            <div class="chips" id="chips"></div>
+            <div class="lcd-right-cluster">
+              <div id="lcd" class="tiny">0 tags</div>
+              <button id="fullscreenBtn" class="action-icon-btn" aria-label="Toggle Fullscreen">⤡</button>
+              <button id="toggleSettings" class="action-icon-btn" aria-label="Toggle Settings">⚙</button>
+            </div>
+          </div>
+          <div class="messages" id="messages" aria-live="polite"></div>
+
+          <div id="typingAnimation" class="typing-animation" style="display:none;">
+              <span>T</span><span>h</span><span>i</span><span>n</span><span>k</span><span>i</span><span>n</span><span>g</span><span>.</span><span>.</span><span>.</span>
+          </div>
+
+          <div id="optionsDisplay" class="options-display">
+              <p class="options-prompt">Choose a direction to continue:</p>
+              <div class="option-buttons" id="optionButtons"></div>
+          </div>
+
+          <div>
+            <label class="visually-hidden" for="input">Message</label>
+            <textarea id="input" placeholder="Type your idea or question, or just use the D-pad to steer!"></textarea>
+          </div>
+          <div id="settings" class="settings">
+            <label for="systemPromptInput" class="visually-hidden">System Prompt</label>
+            <textarea id="systemPromptInput" placeholder="System instructions for the AI"></textarea>
+            <label for="apiKey" class="visually-hidden">OpenAI API Key</label>
+            <input id="apiKey" placeholder="OpenAI API Key (optional)" autocomplete="off" />
+            <button class="btn" id="clearKey">Clear</button>
+            <div class="tiny warn" style="grid-column:1/-1">If you enter a key here in the browser it may be stored locally and exposed. Prefer a serverless proxy for production.</div>
+          </div>
+        </div>
+
+        <!-- RIGHT: A/B buttons map to Send/Save -->
+        <div>
+          <div class="ab">
+            <div>
+              <button class="round-btn" id="btnA" aria-label="Send (A)">A</button>
+              <div class="btn-label">Send</div>
+            </div>
+            <div>
+              <button class="round-btn" id="btnB" aria-label="Save (B)">B</button>
+              <div class="btn-label">Save</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Arrow keys toggle tags • ⌘/Ctrl+Enter sends • Vector shows net steering. This file can call OpenAI if you paste a key, otherwise it uses a built‑in mock.</footer>
+</div>
+
+<script>
+// ============================
+// State
+// ============================
+const state = {
+  tetrad: { enhance:false, obsolesce:false, retrieve:false, reverse:false }, // Back to booleans
+  messages: [], // {role:'user'|'assistant', content}
+  apiKey: '',
+  systemPrompt: 'You are a highly creative and lucid speculative media designer, eager to brainstorm and develop ideas. Your primary goal is to **continuously explore and develop a single speculative artifact or idea across multiple turns.** Your responses should deeply reflect the dynamic steering provided by the control surface. \n\nWhen specific Tetrad forces are applied (especially without explicit user text), focus your output intensely on exploring that direction, **building directly upon the content of previous turns**, and **expanding the speculative artifact** based purely on the embedded Tetrad instructions. Assume continuity in the artifact being discussed. Explicitly mention the active Tetrad forces and how they shape your current response. Use **bold** and *italics* for emphasis to make your responses engaging and easy to read.',
+  currentOptions: [],
+  isLoading: false, // Unified loading state
+  isAwaitingOptionSelection: false,
+};
+
+const el = {
+  arrows: Array.from(document.querySelectorAll('.btn-arrow')),
+  lcd: document.getElementById('lcd'),
+  chips: document.getElementById('chips'),
+  messages: document.getElementById('messages'),
+  input: document.getElementById('input'),
+  btnA: document.getElementById('btnA'),
+  btnB: document.getElementById('btnB'),
+  vector: document.getElementById('vector'),
+  apiKey: document.getElementById('apiKey'),
+  clearKey: document.getElementById('clearKey'),
+  toggleSettings: document.getElementById('toggleSettings'),
+  settings: document.getElementById('settings'),
+  systemPromptInput: document.getElementById('systemPromptInput'),
+  fullscreenBtn: document.getElementById('fullscreenBtn'),
+  optionsDisplay: document.getElementById('optionsDisplay'),
+  optionButtons: document.getElementById('optionButtons'),
+  typingAnimation: document.getElementById('typingAnimation')
+};
+
+// ============================
+// Sound & Haptics
+// ============================
+const sounds = {
+    dpad: new Audio('sounds/dpad_click.mp3'),
+    send: new Audio('sounds/send_confirm.mp3'),
+    generating: new Audio('sounds/generating_loop.mp3'),
+    complete: new Audio('sounds/generation_complete.mp3'),
+};
+const soundVolumes = { dpad: 0.4, send: 0.6, generating: 0.3, complete: 0.7 };
+if (sounds.generating) sounds.generating.preload = "auto";
+
+function playSound(name, loop = false) {
+    if (sounds[name]) {
+        sounds[name].volume = soundVolumes[name] || 0.5;
+        sounds[name].loop = loop;
+        sounds[name].currentTime = 0;
+        sounds[name].play().catch(e => console.warn(`Sound '${name}' play failed:`, e));
+    }
+}
+function stopSound(name) {
+    if (sounds[name]) {
+        sounds[name].pause();
+        sounds[name].currentTime = 0;
+    }
+}
+function triggerHaptic(duration = 30) {
+    if (navigator.vibrate) {
+        navigator.vibrate(duration);
+    }
+}
+
+
+function cap(s){return s.charAt(0).toUpperCase()+s.slice(1)}
+
+// ============================
+// Markdown to HTML Conversion
+// ============================
+function escapeHtml(str){
+    return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]));
+}
+function markdownToHtml(markdownText) {
+    let htmlText = escapeHtml(markdownText);
+    htmlText = htmlText.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    htmlText = htmlText.replace(/(\*|_)(.*?)\1/g, '<em>$2</em>');
+    htmlText = htmlText.replace(/\n/g, '<br>');
+    return htmlText;
+}
+
+// ============================
+// Vector Field Drawing
+// ============================
+function drawVectorField(){
+  const c = el.vector; const ctx = c.getContext('2d');
+  const w = c.width, h = c.height; ctx.clearRect(0,0,w,h);
+  // grid
+  ctx.strokeStyle = '#2b2e35'; ctx.lineWidth = 1;
+  for(let x=0;x<w;x+=30){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+  for(let y=0;y<h;y+=30){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  // base arrows for each active op
+  const arrows = [];
+  if(state.tetrad.enhance) arrows.push({x:w/2,y:h/2,dx:0,dy:-40,col:getComputedStyle(document.documentElement).getPropertyValue('--enhance-color')});
+  if(state.tetrad.obsolesce) arrows.push({x:w/2,y:h/2,dx:40,dy:0,col:getComputedStyle(document.documentElement).getPropertyValue('--obsolesce-color')});
+  if(state.tetrad.retrieve) arrows.push({x:w/2,y:h/2,dx:-40,dy:0,col:getComputedStyle(document.documentElement).getPropertyValue('--retrieve-color')});
+  if(state.tetrad.reverse) arrows.push({x:w/2,y:h/2,dx:0,dy:40,col:getComputedStyle(document.documentElement).getPropertyValue('--reverse-color')});
+  // draw each
+  for(const a of arrows){ drawArrow(ctx,a.x,a.y,a.dx,a.dy,a.col,2); }
+  // resultant
+  const sum = arrows.reduce((acc,a)=>({dx:acc.dx+a.dx, dy:acc.dy+a.dy}), {dx:0,dy:0});
+  if(arrows.length){ drawArrow(ctx,w/2,h/2,sum.dx,sum.dy,'var(--accent)',3); }
+}
+function drawArrow(ctx,x,y,dx,dy,color, lw){
+  const len = Math.hypot(dx,dy)||1; const ux=dx/len, uy=dy/len; const ex=x+dx, ey=y+dy;
+  ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(ex,ey); ctx.stroke();
+  const size = 8 + lw; const hx = ex - ux*size, hy = ey - uy*size;
+  ctx.beginPath(); ctx.moveTo(ex,ey); ctx.lineTo(hx - uy*size*0.5, hy + ux*size*0.5); ctx.lineTo(hx + uy*size*0.5, hy - ux*size*0.5); ctx.closePath(); ctx.fillStyle=color; ctx.fill();
+}
+
+// ============================
+// Renderers & UI State
+// ============================
+function renderTetrad(){
+  const on = Object.entries(state.tetrad).filter(([,v])=>v).map(([k])=>k);
+  el.lcd.textContent = `${on.length} tag${on.length===1?'':'s'}`;
+  el.chips.innerHTML = on.map(k=>`<span class="chip">${cap(k)}</span>`).join(''); // No more counts
+  for(const a of el.arrows){
+    const op=a.dataset.op; const v=state.tetrad[op];
+    a.dataset.active=String(v); a.setAttribute('aria-pressed', v?'true':'false');
+  }
+  drawVectorField();
+}
+function renderMessages(){
+  el.messages.innerHTML = state.messages.map(m=>`<div class="msg ${m.role}"><div class="who">${m.role==='user'?'You':'Assistant'}</div><div class="bubble">${m.role === 'user' ? escapeHtml(m.content) : markdownToHtml(m.content)}</div></div>`).join('');
+  el.messages.scrollTop = el.messages.scrollHeight;
+}
+function renderOptions(activeForces) {
+    el.optionButtons.innerHTML = '';
+    const primaryForce = activeForces[0] || 'default'; // Use the first active force for coloring
+    if (state.currentOptions.length > 0) {
+        state.currentOptions.forEach((option) => {
+            const btn = document.createElement('button');
+            btn.classList.add('option-button', `option-${primaryForce}`);
+            btn.innerHTML = markdownToHtml(option);
+            btn.onclick = () => selectOption(option);
+            el.optionButtons.appendChild(btn);
+        });
+        el.optionsDisplay.classList.add('visible');
+    } else {
+        el.optionsDisplay.classList.remove('visible');
+    }
+}
+function hideOptionsDisplay() {
+    el.optionsDisplay.classList.remove('visible');
+}
+function showTypingAnimation(message = "") {
+    el.typingAnimation.innerHTML = message || `<span>T</span><span>h</span><span>i</span><span>n</span><span>k</span><span>i</span><span>n</span><span>g</span><span>.</span><span>.</span><span>.</span>`;
+    el.typingAnimation.style.display = 'block';
+    el.messages.scrollTop = el.messages.scrollHeight;
+}
+function hideTypingAnimation() {
+    el.typingAnimation.style.display = 'none';
+}
+function setUIState(loading) {
+    state.isLoading = loading;
+    el.input.disabled = loading || state.isAwaitingOptionSelection;
+    el.btnA.disabled = loading;
+    el.arrows.forEach(btn => btn.disabled = loading || state.isAwaitingOptionSelection);
+    // B button and settings/fullscreen can remain active
+}
+
+
+// ============================
+// Prompt Engineering
+// ============================
+function composeTetradSteeringMessage(){
+  const active = Object.entries(state.tetrad).filter(([,v])=>v).map(([k])=>cap(k));
+  if (active.length > 0) {
+    return `\n\nActive Tetrad Forces for *this turn*: [${active.join(', ')}]. Apply these forces *directly* and **strongly** to your response, focusing on the **currently discussed artifact/idea** to push its exploration in this direction.`;
+  }
+  return '';
+}
+function composeOptionsGenerationPrompt() {
+    const conversationSummary = state.messages.filter(m => m.role !== 'system').slice(-3).map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
+    const tetradSteering = composeTetradSteeringMessage();
+    return `Given the current speculative artifact and conversation context: "${conversationSummary}". ${tetradSteering}
+    
+    You are in a mode to help the user explore the next steps for this artifact. Generate **four distinct, imaginative, and concise continuations or developments** of this artifact. Each option should strongly embody the active Tetrad forces in a unique way.
+    
+    Present each as a separate numbered point. Do not elaborate, just present the four distinct choices.`;
+}
+
+// ============================
+// Chat — OpenAI (optional) with fallback mock
+// ============================
+async function getLLMResponse(userContent, forOptionsGeneration = false) {
+    const key = state.apiKey.trim();
+    const tetradSteeringMessage = composeTetradSteeringMessage();
+    const messagesPayload = [
+      {role: 'system', content: state.systemPrompt + tetradSteeringMessage},
+      ...state.messages,
+      {role: 'user', content: userContent}
+    ];
+
+    if(!key){
+        const activeForces = Object.keys(state.tetrad).filter(k => state.tetrad[k]).map(cap).join(', ') || 'None';
+        if (forOptionsGeneration) {
+            return `1. (mock) Option A: Further ${activeForces} exploration.
+2. (mock) Option B: Divergent ${activeForces} path.
+3. (mock) Option C: Unexpected ${activeForces} twist.
+4. (mock) Option D: Minimalist ${activeForces} iteration.`;
+        } else {
+            return `(mock) **Applied Tetrad forces**: ${activeForces}.\nResponse *tailored* by these forces, *building on previous context*. User: ${userContent}`;
+        }
+    }
+    try{
+      const res = await fetch('https://api.openai.com/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
+        body:JSON.stringify({ model:'gpt-4o-mini', messages: messagesPayload, temperature:0.6 })
+      });
+      if(!res.ok){ throw new Error(`OpenAI error ${res.status}: ${await res.text()}`); }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content?.trim() || '(empty response)';
+    } catch(err){
+      console.error(err);
+      const activeForces = Object.keys(state.tetrad).filter(k => state.tetrad[k]).map(cap).join(', ') || 'None';
+      if (forOptionsGeneration) {
+          return `1. (mock) OpenAI failed: *${err.message}*. Option A: Re-try ${activeForces} exploration.
+2. (mock) OpenAI failed: *${err.message}*. Option B: Re-evaluate ${activeForces} path.`;
+      }
+      return `(mock) OpenAI request failed: *${err.message}*. **Applied Tetrad forces**: ${activeForces}.\nResponse *tailored* by these forces. User: ${userContent}`;
+    }
+}
+
+function parseOptionsFromLLMResponse(rawText) {
+    const options = [];
+    const regex = /(\d+\.\s*)(.*?)(?=\n\d+\.|$)/gs;
+    let match;
+    while ((match = regex.exec(rawText)) !== null) { options.push(match[2].trim()); }
+    return options.slice(0, 4);
+}
+
+// Main send function
+async function send(selectedOptionText = null){
+  if (state.isLoading) return;
+  if (state.isAwaitingOptionSelection && !selectedOptionText) return;
+
+  const userTextInput = el.input.value.trim();
+  const hasTetradForces = Object.values(state.tetrad).some(v => v);
+  const activeForcesForOptions = Object.keys(state.tetrad).filter(k => state.tetrad[k]);
+
+  // CASE 1: User typed text (regular turn)
+  if (userTextInput) {
+      setUIState(true);
+      showTypingAnimation(); playSound('generating', true);
+      const userMessage = {role: 'user', content: userTextInput};
+      state.messages.push(userMessage); renderMessages(); el.input.value='';
+      const replyContent = await getLLMResponse(userTextInput, false);
+      stopSound('generating'); playSound('complete');
+      state.messages.push({role:'assistant', content: replyContent}); renderMessages();
+  }
+  // CASE 2: No text, has forces (generate options)
+  else if (hasTetradForces) {
+      setUIState(true);
+      showTypingAnimation("Generating options..."); playSound('generating', true);
+      const optionsRawResponse = await getLLMResponse(composeOptionsGenerationPrompt(), true);
+      stopSound('generating'); playSound('complete');
+      state.currentOptions = parseOptionsFromLLMResponse(optionsRawResponse);
+      if (state.currentOptions.length > 0) {
+          state.isAwaitingOptionSelection = true;
+          renderOptions(activeForcesForOptions);
+          setUIState(false); // Re-enables B button etc., but input remains disabled
+      } else {
+          setUIState(false);
+          alert("Could not generate options. Please try again.");
+      }
+  }
+  // CASE 3: An option was selected
+  else if (selectedOptionText) {
+      state.isAwaitingOptionSelection = false;
+      hideOptionsDisplay();
+      setUIState(true);
+      showTypingAnimation(); playSound('generating', true);
+      const userMessage = {role: 'user', content: selectedOptionText};
+      state.messages.push(userMessage); renderMessages();
+      const replyContent = await getLLMResponse(selectedOptionText, false);
+      stopSound('generating'); playSound('complete');
+      state.messages.push({role:'assistant', content: replyContent}); renderMessages();
+  } else { return; } // No action if no text, no forces, no selection
+
+  // Cleanup for all successful send actions
+  setUIState(false);
+  Object.keys(state.tetrad).forEach(k => state.tetrad[k] = false);
+  renderTetrad();
+  persist();
+}
+
+function selectOption(optionText) {
+    playSound('send'); triggerHaptic(50);
+    send(optionText);
+}
+
+function save(){
+  const blob = new Blob([JSON.stringify({ transcript: state.messages, systemPrompt: state.systemPrompt, savedAt: new Date().toISOString() }, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tetrad-chat-snapshot.json'; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ============================
+// Events & Shortcuts
+// ============================
+for(const a of el.arrows){
+  a.addEventListener('click', ()=> {
+    if (state.isLoading || state.isAwaitingOptionSelection) return;
+    playSound('dpad'); triggerHaptic();
+    const op=a.dataset.op;
+    state.tetrad[op] = !state.tetrad[op]; // Toggle boolean
+    renderTetrad(); persist();
+  });
+}
+
+el.btnA.addEventListener('click', ()=> {
+    playSound('send'); triggerHaptic(50); send();
+});
+el.btnB.addEventListener('click', save);
+
+window.addEventListener('keydown', (e)=>{
+  if (state.isLoading) return;
+  const map={ArrowUp:'enhance',ArrowRight:'obsolesce',ArrowLeft:'retrieve',ArrowDown:'reverse'};
+  if(map[e.key] && !state.isAwaitingOptionSelection){
+    e.preventDefault(); playSound('dpad'); triggerHaptic();
+    const op = map[e.key]; state.tetrad[op] = !state.tetrad[op];
+    renderTetrad(); persist();
+  }
+  if((e.metaKey||e.ctrlKey) && e.key==='Enter' && !state.isAwaitingOptionSelection){
+    playSound('send'); triggerHaptic(50); send();
+  }
+});
+
+el.toggleSettings.addEventListener('click', ()=>{ el.settings.style.display = el.settings.style.display==='grid' ? 'none' : 'grid'; });
+el.apiKey.addEventListener('input', ()=>{ state.apiKey = el.apiKey.value; persist(); });
+el.clearKey.addEventListener('click', ()=>{ state.apiKey=''; el.apiKey.value=''; persist(); });
+el.systemPromptInput.addEventListener('input', ()=>{ state.systemPrompt = el.systemPromptInput.value; persist(); });
+el.fullscreenBtn.addEventListener('click', () => {
+  if (document.fullscreenElement) { document.exitFullscreen(); }
+  else { document.documentElement.requestFullscreen().catch(err => console.error(err)); }
+});
+
+// ============================
+// Persistence
+// ============================
+function persist(){ try{ localStorage.setItem('tetrad-mini-v4', JSON.stringify({
+  tetrad: state.tetrad, messages: state.messages, apiKey: state.apiKey ? 'TEMP_STORED' : '', systemPrompt: state.systemPrompt
+})); }catch(e){} }
+
+function restore(){ try{ const raw = localStorage.getItem('tetrad-mini-v4'); if(!raw) return; const data = JSON.parse(raw);
+  Object.assign(state.tetrad, data.tetrad || {});
+  state.messages = Array.isArray(data.messages) ? data.messages.map(msg => ({
+    role: msg.role || msg.who, content: msg.content || msg.text
+  })) : [];
+  state.systemPrompt = data.systemPrompt || 'You are a highly creative and lucid speculative media designer, eager to brainstorm and develop ideas. Your primary goal is to **continuously explore and develop a single speculative artifact or idea across multiple turns.** Your responses should deeply reflect the dynamic steering provided by the control surface. \n\nWhen specific Tetrad forces are applied (especially without explicit user text), focus your output intensely on exploring that direction, **building directly upon the content of previous turns**, and **expanding the speculative artifact** based purely on the embedded Tetrad instructions. Assume continuity in the artifact being discussed. Explicitly mention the active Tetrad forces and how they shape your current response. Use **bold** and *italics* for emphasis to make your responses engaging and easy to read.';
+  el.systemPromptInput.value = state.systemPrompt;
+} catch(e){ console.error("Failed to restore state:", e); } }
+
+// ============================
+// Boot
+// ============================
+function boot(){
+  restore();
+  if(state.messages.length===0){
+    state.messages.push({role:'assistant', content:'Welcome to Tetrad Mini! Press D-pad arrows to apply Tetrad forces. \n\n*   Press **A (Send)** with text to get a single response. \n*   Press **A (Send)** *without text* (but with D-pad presses) to generate **four distinct speculative options** for the current idea. Click an option to select it and seed the next turn.\n*   To save, press **B**. \n\nPaste an OpenAI API key in Settings for real completions. Enjoy the sounds and haptic feedback on mobile!'});
+  }
+  renderTetrad();
+  renderMessages();
+}
+
+boot();
+</script>
+</body>
+</html>
