@@ -26,8 +26,7 @@
   main{padding:var(--pad); display: flex; justify-content: center; align-items: center;}
 
   .controller{background:var(--card);border:2px solid var(--border);border-radius:14px;padding:16px;display:grid;gap:16px;box-shadow:0 4px 10px rgba(0,0,0,.35); max-width: 900px; width: 100%;}
-  .controller-row{display:grid;gap:16px;grid-template-columns:140px 1fr 120px;align-items:center}
-  @media (max-width:900px){.controller-row{grid-template-columns:1fr;}}
+  .controller-row{display:grid;gap:var(--gap);grid-template-columns:140px 1fr 120px;align-items:center}
 
   /* D-Pad + vector field */
   .leftStack{display:grid;gap:10px}
@@ -114,6 +113,153 @@
   .typing-animation span:nth-child(2) { animation-delay: 0.33s; }
   .typing-animation span:nth-child(3) { animation-delay: 0.66s; }
   @keyframes blink { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+
+  /* --- Mobile-specific adjustments for no-scroll and compact layout --- */
+  @media (max-width:900px){
+    html, body {
+      overflow: hidden; /* Prevent scrolling on the entire page */
+    }
+
+    .wrap {
+      height: 100%; /* Ensure wrap takes full viewport height */
+      min-height: auto; /* Override min-height */
+    }
+
+    main {
+      height: 100%; /* Main takes full available height */
+      padding: var(--pad) 0; /* Adjust horizontal padding, keep vertical for aesthetics */
+    }
+
+    .controller {
+      height: 100%; /* Controller fills main vertically */
+      border-radius: 0; /* Edge-to-edge on mobile */
+      padding: 8px; /* Slightly less padding */
+      max-width: 100%; /* Ensure it takes full width */
+    }
+
+    .controller-row{
+      /* D-pad area (approx 1/4) | Chat area (approx 1/2) | A/B buttons area (approx 1/4) */
+      grid-template-columns: minmax(60px, 1fr) minmax(160px, 2fr) minmax(60px, 1fr);
+      gap: 8px; /* Reduced gap */
+    }
+
+    /* Adjustments for the Left Stack (D-pad & Vector Field) */
+    .leftStack {
+      gap: 5px; /* Smaller gap */
+      padding: 0 2px;
+    }
+    .leftStack .field {
+      height: 50px; /* Smaller vector field */
+      border-radius: 6px;
+    }
+    canvas#vector {
+      height: 50px;
+    }
+    .dpad {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2px;
+      max-width: 100px; /* Constrain dpad width more */
+    }
+    .dpad .btn-arrow {
+      height: 28px;
+      font-size: 11px;
+      border-radius: 6px;
+    }
+    .arrow-label {
+      font-size: 8px;
+      margin-top: 2px;
+    }
+
+    /* Adjustments for the Center Screen (Chat) */
+    .screen {
+      padding: 6px;
+      grid-template-rows: auto 1fr auto; /* messages takes remaining space */
+      gap: 6px;
+    }
+    .messages {
+      min-height: 80px; /* Ensure a good default height, but 1fr handles overflow */
+      overflow-y: auto; /* Crucial: internal scrolling for chat history */
+      padding: 5px;
+      border-radius: 8px;
+    }
+    .msg .who {
+        font-size: 9px;
+    }
+    .bubble {
+        font-size: 12px;
+        padding: 6px 8px;
+        border-radius: 8px;
+    }
+    textarea {
+      min-height: 45px;
+      padding: 7px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+    .lcdbar {
+      gap: 5px;
+    }
+    .chips {
+        font-size: 8px;
+        gap: 2px;
+        margin-top: 1px;
+        margin-bottom: 1px;
+    }
+    .chip {
+        padding: 1px 4px;
+        border-radius: 999px;
+    }
+    #lcd {
+        font-size: 9px;
+    }
+    .action-icon-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 13px;
+        border-radius: 50%;
+    }
+
+    /* Adjustments for the Right A/B Buttons */
+    .ab {
+      gap: 8px;
+      padding: 0 2px;
+    }
+    .round-btn {
+      width: 40px;
+      height: 40px;
+      font-size: 15px;
+    }
+    .btn-label {
+      font-size: 8px;
+      margin-top: 4px;
+    }
+
+    /* Adjust options display for mobile */
+    .options-display {
+      margin-top: 6px;
+      padding: 6px;
+      border-radius: 8px;
+    }
+    .options-prompt {
+      font-size: 9px;
+      margin-bottom: 5px;
+    }
+    .option-buttons {
+      gap: 5px;
+    }
+    .option-button {
+      font-size: 11px;
+      padding: 7px;
+      flex: 1 1 calc(50% - 5px); /* Two columns with a gap */
+      border-radius: 6px;
+      border-left-width: 3px; /* Slightly thinner left border */
+    }
+
+    footer {
+        padding: 5px var(--pad);
+        font-size: 9px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -326,11 +472,12 @@ function renderMessages(){
 }
 function renderOptions(activeForces) {
     el.optionButtons.innerHTML = '';
-    const primaryForce = activeForces[0] || 'default'; // Use the first active force for coloring
+    const primaryForceClass = activeForces.length > 0 ? `option-${activeForces[0]}` : ''; // Use first active force for class
+    
     if (state.currentOptions.length > 0) {
         state.currentOptions.forEach((option) => {
             const btn = document.createElement('button');
-            btn.classList.add('option-button', `option-${primaryForce}`);
+            btn.classList.add('option-button', primaryForceClass);
             btn.innerHTML = markdownToHtml(option);
             btn.onclick = () => selectOption(option);
             el.optionButtons.appendChild(btn);
@@ -438,7 +585,7 @@ async function send(selectedOptionText = null){
 
   const userTextInput = el.input.value.trim();
   const hasTetradForces = Object.values(state.tetrad).some(v => v);
-  const activeForcesForOptions = Object.keys(state.tetrad).filter(k => state.tetrad[k]);
+  const activeForces = Object.keys(state.tetrad).filter(k => state.tetrad[k]);
 
   // CASE 1: User typed text (regular turn)
   if (userTextInput) {
@@ -459,7 +606,7 @@ async function send(selectedOptionText = null){
       state.currentOptions = parseOptionsFromLLMResponse(optionsRawResponse);
       if (state.currentOptions.length > 0) {
           state.isAwaitingOptionSelection = true;
-          renderOptions(activeForcesForOptions);
+          renderOptions(activeForces); // Pass active forces for coloring
           setUIState(false); // Re-enables B button etc., but input remains disabled
       } else {
           setUIState(false);
@@ -481,7 +628,7 @@ async function send(selectedOptionText = null){
 
   // Cleanup for all successful send actions
   setUIState(false);
-  Object.keys(state.tetrad).forEach(k => state.tetrad[k] = false);
+  Object.keys(state.tetrad).forEach(k => state.tetrad[k] = false); // Reset toggles
   renderTetrad();
   persist();
 }
@@ -516,7 +663,7 @@ el.btnB.addEventListener('click', save);
 
 window.addEventListener('keydown', (e)=>{
   if (state.isLoading) return;
-  const map={ArrowUp:'enhance',ArrowRight:'obsolesce',ArrowLeft:'retrieve',ArrowDown:'reverse'};
+  const map={ArrowUp:'enhance',ArrowRight:'obsolesce',Left:'retrieve',ArrowDown:'reverse'}; /* Corrected ArrowLeft to Left to match old data-op value for consistency, though 'ArrowLeft' is the event.key */
   if(map[e.key] && !state.isAwaitingOptionSelection){
     e.preventDefault(); playSound('dpad'); triggerHaptic();
     const op = map[e.key]; state.tetrad[op] = !state.tetrad[op];
